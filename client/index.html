@@ -1,86 +1,304 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Event Finding & Tracking Platform</title>
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vibe Events — Find. RSVP. Vibe.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#07070f}
+  .glass{background:rgba(255,255,255,.04);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.09)}
+  .glow:hover{box-shadow:0 0 0 1px rgba(129,140,248,.5),0 12px 40px -8px rgba(124,58,237,.45);transform:translateY(-3px)}
+  .grad-text{background:linear-gradient(90deg,#818cf8,#c084fc,#34d399);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .grad-btn{background:linear-gradient(135deg,#6366f1,#a855f7)}
+  .grad-ok{background:linear-gradient(135deg,#10b981,#34d399)}
+  .blob{position:fixed;border-radius:9999px;filter:blur(110px);opacity:.28;z-index:0;pointer-events:none}
+  @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
+  .pop{animation:pop .5s ease}
+  @keyframes rise{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+  .rise{animation:rise .35s ease both}
+  @keyframes ping2{75%,100%{transform:scale(2.2);opacity:0}}
+  .ping2{animation:ping2 1.6s cubic-bezier(0,0,.2,1) infinite}
+  ::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:#312e81;border-radius:8px}
+</style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen p-8">
-  <div id="root"></div>
+<body class="text-slate-100 min-h-screen">
+<div class="blob w-96 h-96 bg-indigo-600 -top-24 -left-24"></div>
+<div class="blob w-96 h-96 bg-purple-600 top-1/3 -right-32"></div>
+<div class="blob w-80 h-80 bg-emerald-500 bottom-0 left-1/4"></div>
+<div id="root" class="relative z-10"></div>
 
-  <script type="text/babel">
-    const { useState, useEffect } = React;
+<script type="text/babel">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+const API = 'http://localhost:5000/api';
+const USER_ID = (() => { try { let u = localStorage.getItem('vibe_uid'); if (!u) { u = 'u_' + Math.random().toString(36).slice(2, 8); localStorage.setItem('vibe_uid', u); } return u; } catch { return 'u_guest'; } })();
 
-    function App() {
-      const [events, setEvents] = useState([
-        { id: '1', name: 'Tech Conference 2026', date: '2026-10-10', venue: 'Convention Center', city: 'Mumbai' },
-        { id: '2', name: 'Music Festival Vibe', date: '2026-10-15', venue: 'Open Ground', city: 'Pune' },
-        { id: '3', name: 'AI & Cloud Summit', date: '2026-10-20', venue: 'IT Park Auditorium', city: 'Bangalore' }
-      ]);
-      const [rsvps, setRsvps] = useState([]);
-      const [shareLinks, setShareLinks] = useState({});
+const MOCK_EVENTS = [
+  { id: '1', name: 'Tech Conference 2026', date: '2026-10-10', time: '09:30 AM', venue: 'Convention Center', city: 'Mumbai', category: 'Tech', trending: true, friends: 12 },
+  { id: '2', name: 'Music Festival Vibe', date: '2026-10-15', time: '06:00 PM', venue: 'Open Ground', city: 'Pune', category: 'Music', trending: true, friends: 27 },
+  { id: '3', name: 'AI & Cloud Summit', date: '2026-10-20', time: '10:00 AM', venue: 'IT Park Auditorium', city: 'Bangalore', category: 'AI/Cloud', trending: false, friends: 8 },
+  { id: '4', name: 'Indie Jam Night', date: '2026-10-15', time: '08:30 PM', venue: 'Blue Frog Lounge', city: 'Pune', category: 'Music', trending: false, friends: 5 },
+  { id: '5', name: 'LLM Builders Meetup', date: '2026-10-24', time: '05:00 PM', venue: 'Cloud Hub', city: 'Hyderabad', category: 'AI/Cloud', trending: true, friends: 15 },
+  { id: '6', name: 'React & Web Devs Day', date: '2026-10-28', time: '11:00 AM', venue: 'Tech Park Hall B', city: 'Pune', category: 'Tech', trending: false, friends: 9 },
+];
+const CATS = [['All', 'fa-wand-magic-sparkles'], ['Tech', 'fa-microchip'], ['Music', 'fa-music'], ['AI/Cloud', 'fa-cloud']];
+const CAT_STYLE = { Tech: 'text-indigo-300 bg-indigo-500/15', Music: 'text-fuchsia-300 bg-fuchsia-500/15', 'AI/Cloud': 'text-emerald-300 bg-emerald-500/15' };
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-      const handleRSVP = (event) => {
-        const shareCode = Math.random().toString(36).substring(2, 8);
-        const link = `http://localhost:5000/invite/${shareCode}`;
-        setRsvps([...rsvps, event]);
-        setShareLinks({ ...shareLinks, [event.id]: link });
-      };
+async function api(path, opts = {}) {
+  const c = new AbortController(); const t = setTimeout(() => c.abort(), 2500);
+  try {
+    const r = await fetch(API + path, { ...opts, signal: c.signal, headers: { 'Content-Type': 'application/json' } });
+    if (!r.ok) throw new Error(r.status);
+    return { ok: true, data: await r.json() };
+  } catch { return { ok: false, data: null }; } finally { clearTimeout(t); }
+}
+const normalize = (e, i) => ({
+  id: String(e.id ?? e._id ?? i), name: e.name || e.title || 'Untitled Event', date: (e.date || '').slice(0, 10),
+  time: e.time || '07:00 PM', venue: e.venue || 'TBA', city: e.city || '', category: e.category || ['Tech', 'Music', 'AI/Cloud'][i % 3],
+  trending: e.trending ?? i % 2 === 0, friends: e.friends ?? 3 + (i * 7) % 20,
+});
+const fmtDate = d => { const x = new Date(d + 'T00:00:00'); return isNaN(x) ? d : x.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }); };
 
-      return (
-        <div class="max-w-4xl mx-auto">
-          <h1 class="text-3xl font-bold mb-6 text-indigo-400">Event Finder & Vibe Tracker</h1>
-          
-          <h2 class="text-xl font-semibold mb-3">Upcoming Local Events</h2>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            {events.map(ev => (
-              <div key={ev.id} class="bg-gray-800 p-4 rounded-lg shadow border border-gray-700">
-                <h3 class="text-lg font-bold text-yellow-400">{ev.name}</h3>
-                <p class="text-sm text-gray-300">📅 {ev.date} | 📍 {ev.venue}, {ev.city}</p>
-                
-                <div class="mt-4 flex items-center justify-between">
-                  <button 
-                    onClick={() => handleRSVP(ev)} 
-                    class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded text-sm font-medium">
-                    Interested / RSVP
-                  </button>
+function Counter({ value }) {
+  const [k, setK] = useState(0); const prev = useRef(value);
+  useEffect(() => { if (prev.current !== value) { setK(x => x + 1); prev.current = value; } }, [value]);
+  return <span key={k} className="inline-block pop tabular-nums">{value}</span>;
+}
 
-                  {shareLinks[ev.id] && (
-                    <span class="text-xs text-green-400 font-mono bg-gray-900 p-1.5 rounded">
-                      Invite Link Created!
-                    </span>
-                  )}
-                </div>
+function Calendar({ events, selected, onSelect }) {
+  const first = events.length ? new Date(events[0].date + 'T00:00:00') : new Date();
+  const [cur, setCur] = useState(new Date(isNaN(first) ? Date.now() : first.getFullYear(), isNaN(first) ? 0 : first.getMonth(), 1));
+  const y = cur.getFullYear(), m = cur.getMonth();
+  const offset = new Date(y, m, 1).getDay(), days = new Date(y, m + 1, 0).getDate();
+  const byDate = useMemo(() => { const o = {}; events.forEach(e => { o[e.date] = (o[e.date] || 0) + 1; }); return o; }, [events]);
+  const cells = [...Array(offset).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  const key = d => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  return (
+    <div className="glass rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-bold flex items-center gap-2"><i className="fa-regular fa-calendar text-indigo-400"></i>{MONTHS[m]} {y}</h3>
+        <div className="flex gap-1">
+          {[-1, 1].map(n => <button key={n} aria-label={n < 0 ? 'Previous month' : 'Next month'} onClick={() => setCur(new Date(y, m + n, 1))} className="w-8 h-8 rounded-lg hover:bg-white/10 transition"><i className={`fa-solid fa-chevron-${n < 0 ? 'left' : 'right'} text-xs`}></i></button>)}
+        </div>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-slate-500 mb-1">{'SMTWTFS'.split('').map((d, i) => <div key={i}>{d}</div>)}</div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((d, i) => {
+          if (!d) return <div key={i}></div>;
+          const k = key(d), has = byDate[k], sel = selected === k;
+          return (
+            <button key={i} disabled={!has} onClick={() => onSelect(sel ? null : k)}
+              className={`relative aspect-square rounded-lg text-sm transition ${sel ? 'grad-btn text-white font-bold shadow-lg shadow-purple-500/40' : has ? 'bg-emerald-500/15 text-emerald-300 font-semibold hover:bg-emerald-500/30 ring-1 ring-emerald-400/30' : 'text-slate-600 cursor-default'}`}>
+              {d}{has && !sel && <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-emerald-400"></span>}
+            </button>);
+        })}
+      </div>
+      <p className="text-xs text-slate-500 mt-3 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400"></span>Dates with local events{selected && <button onClick={() => onSelect(null)} className="ml-auto text-indigo-300 hover:underline">Clear</button>}</p>
+    </div>);
+}
 
-                {shareLinks[ev.id] && (
-                  <div class="mt-2 text-xs text-gray-400 break-all bg-gray-900 p-2 rounded">
-                    Share Link: <a href={shareLinks[ev.id]} target="_blank" class="text-blue-400 underline">{shareLinks[ev.id]}</a>
-                  </div>
-                )}
-              </div>
-            ))}
+function EventCard({ ev, going, onRSVP, onOpen, friends, idx }) {
+  return (
+    <div style={{ animationDelay: idx * 60 + 'ms' }} className="glass glow rise rounded-2xl p-5 transition-all duration-300 flex flex-col">
+      <div className="flex flex-wrap gap-2 mb-3">
+        <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${CAT_STYLE[ev.category] || 'text-slate-300 bg-white/10'}`}>{ev.category}</span>
+        {ev.trending && <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-orange-500/15 text-orange-300"><i className="fa-solid fa-fire mr-1"></i>Trending</span>}
+        {going && <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 flex items-center gap-1.5"><span className="relative flex w-2 h-2"><span className="ping2 absolute inset-0 rounded-full bg-emerald-400"></span><span className="relative w-2 h-2 rounded-full bg-emerald-400"></span></span>Vibe Check Active</span>}
+      </div>
+      <h3 className="text-lg font-bold leading-snug mb-3">{ev.name}</h3>
+      <ul className="text-sm text-slate-400 space-y-1.5 mb-4">
+        <li><i className="fa-regular fa-calendar w-5 text-indigo-400"></i>{fmtDate(ev.date)}</li>
+        <li><i className="fa-regular fa-clock w-5 text-purple-400"></i>{ev.time}</li>
+        <li><i className="fa-solid fa-location-dot w-5 text-emerald-400"></i>{ev.venue}{ev.city && `, ${ev.city}`}</li>
+      </ul>
+      <div className="mt-auto flex items-center justify-between gap-3">
+        <span className="text-xs text-slate-400"><i className="fa-solid fa-user-group text-emerald-400 mr-1.5"></i><b className="text-slate-200"><Counter value={friends} /></b> going</span>
+        {going
+          ? <button onClick={() => onOpen(ev)} className="grad-ok text-slate-900 font-bold text-sm px-4 py-2 rounded-xl hover:brightness-110 transition"><i className="fa-solid fa-share-nodes mr-1.5"></i>Invite</button>
+          : <button onClick={() => onRSVP(ev)} className="grad-btn text-white font-bold text-sm px-4 py-2 rounded-xl hover:brightness-110 hover:shadow-lg hover:shadow-purple-500/40 active:scale-95 transition"><i className="fa-solid fa-heart mr-1.5"></i>Interested / RSVP</button>}
+      </div>
+    </div>);
+}
+
+function VibeModal({ ev, link, friends, onClose, onShare, onCancel }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(link); }
+    catch { const t = document.createElement('textarea'); t.value = link; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+    setCopied(true); onShare(); setTimeout(() => setCopied(false), 2000);
+  };
+  useEffect(() => { const h = e => e.key === 'Escape' && onClose(); window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, []);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="rise glass rounded-3xl p-7 w-full max-w-md shadow-2xl shadow-purple-900/40 border-indigo-400/30">
+        <div className="flex justify-between items-start mb-5">
+          <div>
+            <div className="text-xs font-semibold text-emerald-300 mb-1"><i className="fa-solid fa-circle-check mr-1"></i>You're in! Vibe Check is live</div>
+            <h3 className="text-xl font-extrabold">{ev.name}</h3>
           </div>
-
-          <h2 class="text-xl font-semibold mb-3 text-green-400">RSVP Dashboard</h2>
-          <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
-            {rsvps.length === 0 ? (
-              <p class="text-gray-400 text-sm">No confirmed events yet. Click RSVP above!</p>
-            ) : (
-              <ul class="space-y-2">
-                {rsvps.map((r, idx) => (
-                  <li key={idx} class="text-sm text-gray-200">✅ Confirmed Attendance for <strong>{r.name}</strong></li>
-                ))}
-              </ul>
-            )}
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-lg hover:bg-white/10"><i className="fa-solid fa-xmark"></i></button>
+        </div>
+        <label className="text-xs uppercase tracking-wider text-slate-400">Your unique invite link</label>
+        <div className="flex gap-2 mt-2 mb-5">
+          <input readOnly value={link} onFocus={e => e.target.select()} className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm font-mono text-indigo-200 outline-none focus:border-indigo-400" />
+          <button onClick={copy} className={`px-4 rounded-xl font-bold text-sm transition ${copied ? 'grad-ok text-slate-900' : 'grad-btn text-white hover:brightness-110'}`}>
+            <i className={`fa-solid ${copied ? 'fa-check' : 'fa-copy'} mr-1.5`}></i>{copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+        <div className="rounded-2xl bg-emerald-500/10 border border-emerald-400/20 p-4 flex items-center gap-4 mb-5">
+          <div className="relative w-14 h-14 rounded-full bg-emerald-500/20 flex items-center justify-center">
+            <span className="ping2 absolute inset-0 rounded-full bg-emerald-400/30"></span>
+            <i className="fa-solid fa-user-group text-emerald-300 text-lg relative"></i>
+          </div>
+          <div>
+            <div className="text-3xl font-extrabold text-emerald-300"><Counter value={friends} /></div>
+            <div className="text-xs text-slate-400 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>Friends attending · live</div>
           </div>
         </div>
-      );
-    }
+        <div className="flex gap-2">
+          <a onClick={onShare} target="_blank" rel="noreferrer" href={`https://wa.me/?text=${encodeURIComponent(`Join me at ${ev.name}! ${link}`)}`} className="flex-1 text-center py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm font-semibold transition"><i className="fa-brands fa-whatsapp text-emerald-400 mr-1.5"></i>WhatsApp</a>
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-rose-500/20 text-sm font-semibold text-rose-300 transition"><i className="fa-solid fa-ban mr-1.5"></i>Cancel RSVP</button>
+        </div>
+      </div>
+    </div>);
+}
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-  </script>
+function App() {
+  const [events, setEvents] = useState(MOCK_EVENTS);
+  const [live, setLive] = useState(null);
+  const [q, setQ] = useState(''); const [cat, setCat] = useState('All'); const [day, setDay] = useState(null);
+  const [rsvps, setRsvps] = useState({});      // eventId -> { link }
+  const [friends, setFriends] = useState(() => Object.fromEntries(MOCK_EVENTS.map(e => [e.id, e.friends])));
+  const [invites, setInvites] = useState(0);
+  const [modal, setModal] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const flash = m => { setToast(m); setTimeout(() => setToast(null), 2600); };
+
+  const load = useCallback(async () => {
+    const r = await api('/events');
+    const list = Array.isArray(r.data) ? r.data : r.data?.events;
+    if (r.ok && list?.length) {
+      const n = list.map(normalize); setEvents(n); setLive(true);
+      setFriends(f => ({ ...Object.fromEntries(n.map(e => [e.id, e.friends])), ...f }));
+    } else setLive(false);
+  }, []);
+  useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t); }, [load]);
+
+  // Live friends-attending polling (falls back to simulated drift)
+  useEffect(() => {
+    const t = setInterval(async () => {
+      for (const id of Object.keys(rsvps)) {
+        const r = await api(`/friends-attending/${id}`);
+        const c = r.ok ? (r.data?.count ?? r.data?.friends ?? (Array.isArray(r.data) ? r.data.length : null)) : null;
+        setFriends(f => ({ ...f, [id]: c != null ? c : f[id] + (Math.random() < 0.5 ? 1 : 0) }));
+      }
+    }, 5000);
+    return () => clearInterval(t);
+  }, [rsvps]);
+
+  const rsvp = async ev => {
+    const code = Math.random().toString(36).slice(2, 8);
+    let link = `${location.origin === 'null' || location.protocol === 'file:' ? 'http://localhost:5000' : location.origin}/invite/${code}`;
+    setRsvps(r => ({ ...r, [ev.id]: { link } })); setFriends(f => ({ ...f, [ev.id]: (f[ev.id] || 0) + 1 })); setModal(ev.id);
+    const r = await api('/rsvp', { method: 'POST', body: JSON.stringify({ eventId: ev.id, userId: USER_ID, shareCode: code }) });
+    const srv = r.data?.shareLink || r.data?.link || r.data?.inviteLink;
+    if (srv) setRsvps(x => ({ ...x, [ev.id]: { link: srv } }));
+    if (!r.ok) flash('Offline mode — RSVP saved locally');
+  };
+  const cancel = id => {
+    setRsvps(r => { const n = { ...r }; delete n[id]; return n; });
+    setFriends(f => ({ ...f, [id]: Math.max(0, (f[id] || 1) - 1) })); setModal(null); flash('RSVP cancelled');
+  };
+
+  const shown = useMemo(() => events.filter(e =>
+    (cat === 'All' || e.category === cat) && (!day || e.date === day) &&
+    (`${e.name} ${e.venue} ${e.city}`.toLowerCase().includes(q.toLowerCase()))), [events, cat, day, q]);
+  const going = events.filter(e => rsvps[e.id]);
+  const friendsTotal = going.reduce((s, e) => s + (friends[e.id] || 0), 0);
+  const modalEv = events.find(e => e.id === modal);
+
+  const stats = [
+    ['Total RSVPs', going.length, 'fa-ticket', 'from-indigo-500 to-purple-500'],
+    ['Invites Sent', invites, 'fa-paper-plane', 'from-purple-500 to-fuchsia-500'],
+    ['Friends Attending', friendsTotal, 'fa-user-group', 'from-emerald-500 to-teal-400'],
+  ];
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <header className="flex flex-wrap items-center justify-between gap-4 mb-10">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl grad-btn flex items-center justify-center shadow-lg shadow-purple-500/40"><i className="fa-solid fa-bolt text-white"></i></div>
+          <div><h1 className="text-2xl font-extrabold tracking-tight grad-text">Vibe Events</h1><p className="text-xs text-slate-500">Find. RSVP. Vibe with friends.</p></div>
+        </div>
+        <div className="glass rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${live === null ? 'bg-slate-500' : live ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+          {live === null ? 'Connecting…' : live ? 'Live API connected' : 'Demo mode · mock data'}
+        </div>
+      </header>
+
+      <section className="mb-10 text-center">
+        <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight mb-3">Discover events <span className="grad-text">worth the vibe</span></h2>
+        <p className="text-slate-400 max-w-xl mx-auto">Browse local tech, music and AI gatherings, lock in your spot, and share your invite in one tap.</p>
+      </section>
+
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        {stats.map(([label, val, icon, g]) => (
+          <div key={label} className="glass rounded-2xl p-5 flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${g} flex items-center justify-center shadow-lg`}><i className={`fa-solid ${icon} text-white`}></i></div>
+            <div><div className="text-3xl font-extrabold"><Counter value={val} /></div><div className="text-xs text-slate-400">{label}</div></div>
+          </div>))}
+      </section>
+
+      <div className="grid lg:grid-cols-[1fr_320px] gap-8">
+        <main>
+          <div className="glass rounded-2xl p-3 flex items-center gap-3 mb-4 focus-within:border-indigo-400/60 transition">
+            <i className="fa-solid fa-magnifying-glass text-slate-500 ml-2"></i>
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search events, venues or cities…" className="flex-1 bg-transparent outline-none text-sm placeholder-slate-500 py-1.5" />
+            {q && <button onClick={() => setQ('')} className="text-slate-500 hover:text-white px-2"><i className="fa-solid fa-xmark"></i></button>}
+          </div>
+          <div className="flex flex-wrap gap-2 mb-6">
+            {CATS.map(([c, ic]) => (
+              <button key={c} onClick={() => setCat(c)} className={`px-4 py-2 rounded-full text-sm font-semibold transition ${cat === c ? 'grad-btn text-white shadow-lg shadow-purple-500/30' : 'glass text-slate-300 hover:bg-white/10'}`}>
+                <i className={`fa-solid ${ic} mr-2 text-xs`}></i>{c}
+              </button>))}
+            {day && <button onClick={() => setDay(null)} className="px-4 py-2 rounded-full text-sm font-semibold bg-emerald-500/15 text-emerald-300">{fmtDate(day)} <i className="fa-solid fa-xmark ml-1"></i></button>}
+          </div>
+          {shown.length === 0
+            ? <div className="glass rounded-2xl p-12 text-center text-slate-400"><i className="fa-regular fa-face-frown text-3xl mb-3 block"></i>No events match your filters.</div>
+            : <div className="grid md:grid-cols-2 gap-5">{shown.map((ev, i) => <EventCard key={ev.id} idx={i} ev={ev} going={!!rsvps[ev.id]} friends={friends[ev.id] ?? ev.friends} onRSVP={rsvp} onOpen={e => setModal(e.id)} />)}</div>}
+        </main>
+
+        <aside className="space-y-6">
+          <Calendar events={events} selected={day} onSelect={setDay} />
+          <div className="glass rounded-2xl p-5">
+            <h3 className="font-bold mb-4 flex items-center gap-2"><i className="fa-solid fa-chart-line text-emerald-400"></i>RSVP Dashboard</h3>
+            {going.length === 0 ? <p className="text-sm text-slate-500">No RSVPs yet. Tap “Interested” on any event to start your Vibe Check.</p> :
+              <ul className="space-y-3">{going.map(e => (
+                <li key={e.id} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition cursor-pointer" onClick={() => setModal(e.id)}>
+                  <span className="relative flex w-2.5 h-2.5"><span className="ping2 absolute inset-0 rounded-full bg-emerald-400"></span><span className="relative w-2.5 h-2.5 rounded-full bg-emerald-400"></span></span>
+                  <div className="min-w-0 flex-1"><div className="text-sm font-semibold truncate">{e.name}</div><div className="text-xs text-slate-500">{fmtDate(e.date)} · Confirmed</div></div>
+                  <span className="text-xs font-bold text-emerald-300 bg-emerald-500/15 px-2 py-1 rounded-lg"><i className="fa-solid fa-user-group mr-1"></i><Counter value={friends[e.id] || 0} /></span>
+                </li>))}</ul>}
+          </div>
+        </aside>
+      </div>
+
+      <footer className="text-center text-xs text-slate-600 mt-14">Vibe Events · React 18 + Tailwind · API: localhost:5000</footer>
+
+      {modalEv && rsvps[modalEv.id] && <VibeModal ev={modalEv} link={rsvps[modalEv.id].link} friends={friends[modalEv.id] || 0}
+        onClose={() => setModal(null)} onShare={() => setInvites(n => n + 1)} onCancel={() => cancel(modalEv.id)} />}
+      {toast && <div className="rise fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] glass rounded-full px-5 py-3 text-sm font-semibold shadow-xl">{toast}</div>}
+    </div>);
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
 </body>
 </html>
